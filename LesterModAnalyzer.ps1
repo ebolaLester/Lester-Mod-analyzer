@@ -1,60 +1,75 @@
-# Temporary policy bypass
+# Temporary bypass
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
-# Title
+# Set console title
 $host.UI.RawUI.WindowTitle = "Lester MOD ANALYZER - MADE BY LESTER"
 
-Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "       LESTER MOD ANALYZER - MADE BY LESTER     " -ForegroundColor Green
-Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host ""
+# Intro
+Write-Host "`n═════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "         LESTER MOD ANALYZER - MADE BY LESTER         " -ForegroundColor Green
+Write-Host "═════════════════════════════════════════════════════`n" -ForegroundColor Cyan
 
-# Ask user for .minecraft path
-$modsFolder = Read-Host "👉 Enter your Minecraft 'mods' folder path (e.g. C:\Users\YourName\AppData\Roaming\.minecraft\mods)"
+# Ask for the mods folder
+$modsFolder = Read-Host "👉 Enter path to your Minecraft 'mods' folder"
 
-# Create report path
-$timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$report = "$PSScriptRoot\LesterModReport_$timestamp.txt"
-
-# Suspicious mod keywords
-$blacklist = @('doomsday','vape','sigma','flux','jigsaw')
+# Suspicious keywords
+$blacklist = @('doomsday','vape','sigma','flux','jigsaw','huzuni','wurst','impact','liquidbounce','aimassist','autoclicker','xray','killaura')
 
 # Validate path
 if (-not (Test-Path $modsFolder)) {
-    Write-Host "❌ Invalid path. Folder not found: $modsFolder" -ForegroundColor Red
-    "❌ Invalid path: $modsFolder" | Out-File $report
+    Write-Host "❌ Invalid path: $modsFolder" -ForegroundColor Red
     exit
 }
 
-Write-Host "`n✅ Scanning folder: $modsFolder" -ForegroundColor Cyan
-Add-Content $report "`n✅ Scanning folder: $modsFolder"
-
-# Get mod .jar files
+# Get .jar mod files
 $mods = Get-ChildItem -Path $modsFolder -Filter *.jar -File -ErrorAction SilentlyContinue
 if ($mods.Count -eq 0) {
     Write-Host "⚠️  No .jar mod files found in that folder." -ForegroundColor Yellow
-    Add-Content $report "⚠️  No .jar mod files found."
     exit
 }
 
-# Analyze mods
+# Scan each mod
 foreach ($mod in $mods) {
     $modName = $mod.Name
+    $path = $mod.FullName
     $sizeMB = "{0:N2}" -f ($mod.Length / 1MB)
-    $matches = $blacklist | Where-Object { $modName -match [regex]::Escape($_) }
+    $flagged = $false
+    $found = @()
 
-    if ($matches) {
-        $line = "❗ Suspicious: $modName | ${sizeMB}MB | Match: $($matches -join ', ')"
-        Write-Host $line -ForegroundColor Red
-        Add-Content $report $line
+    # Check filename first
+    foreach ($keyword in $blacklist) {
+        if ($modName -match [regex]::Escape($keyword)) {
+            $found += "filename: $keyword"
+            $flagged = $true
+        }
+    }
+
+    # Check internal strings
+    try {
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+        foreach ($entry in $zip.Entries) {
+            foreach ($keyword in $blacklist) {
+                if ($entry.FullName -match $keyword) {
+                    $found += "inside: $keyword"
+                    $flagged = $true
+                }
+            }
+        }
+        $zip.Dispose()
+    } catch {
+        Write-Host "⚠️  Could not read $modName — Skipped." -ForegroundColor Yellow
+        continue
+    }
+
+    # Output result
+    if ($flagged) {
+        Write-Host "❗ Suspicious: $modName | $sizeMB MB | $($found -join ', ')" -ForegroundColor Red
     } else {
-        $line = "✔ $modName | ${sizeMB}MB | Clean"
-        Write-Host $line -ForegroundColor Green
-        Add-Content $report $line
+        Write-Host "✔ Clean: $modName | $sizeMB MB" -ForegroundColor Green
     }
 }
 
-Write-Host "`n✅ Scan complete. Report saved to: $report" -ForegroundColor Cyan
-Start-Sleep -Seconds 1
-Invoke-Item $report
+Write-Host "`n✅ Done. Press any key to close..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
 
