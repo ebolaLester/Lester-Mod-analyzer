@@ -1,73 +1,60 @@
-# Set execution policy for the session
+# Temporary policy bypass
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 # Title
-$host.UI.RawUI.WindowTitle = "Lester Mod Analyzer"
+$host.UI.RawUI.WindowTitle = "Lester MOD ANALYZER - MADE BY LESTER"
 
-# Intro
 Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "       LESTER MOD ANALYZER - POWERED BY PS     " -ForegroundColor Green
+Write-Host "       LESTER MOD ANALYZER - MADE BY LESTER     " -ForegroundColor Green
 Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
-# Setup
+# Ask user for .minecraft path
+$modsFolder = Read-Host "👉 Enter your Minecraft 'mods' folder path (e.g. C:\Users\YourName\AppData\Roaming\.minecraft\mods)"
+
+# Create report path
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$report = "$PSScriptRoot\LesterModAnalysis_$timestamp.txt"
+$report = "$PSScriptRoot\LesterModReport_$timestamp.txt"
+
+# Suspicious mod keywords
 $blacklist = @('doomsday','vape','sigma','flux','jigsaw')
 
-# Detect all 'mods' folders inside .minecraft
-$minecraftRoot = "$env:USERPROFILE\.minecraft"
-$modsPaths = Get-ChildItem -Path $minecraftRoot -Recurse -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "mods" }
-
-# If no mods folders found
-if (-not $modsPaths) {
-    Write-Host "❌ No mods folder found in .minecraft" -ForegroundColor Red
-    "❌ No mods folder found in .minecraft" | Out-File $report
+# Validate path
+if (-not (Test-Path $modsFolder)) {
+    Write-Host "❌ Invalid path. Folder not found: $modsFolder" -ForegroundColor Red
+    "❌ Invalid path: $modsFolder" | Out-File $report
     exit
 }
 
-# Report potential multiple mod folders
-if ($modsPaths.Count -gt 1) {
-    Write-Host "⚠️  Multiple mods folders found:" -ForegroundColor Yellow
-    Add-Content $report "⚠️  Multiple mods folders found:"
-    foreach ($path in $modsPaths) {
-        Write-Host " - $($path.FullName)" -ForegroundColor DarkYellow
-        Add-Content $report " - $($path.FullName)"
-    }
-    Write-Host ""
-    Add-Content $report ""
+Write-Host "`n✅ Scanning folder: $modsFolder" -ForegroundColor Cyan
+Add-Content $report "`n✅ Scanning folder: $modsFolder"
+
+# Get mod .jar files
+$mods = Get-ChildItem -Path $modsFolder -Filter *.jar -File -ErrorAction SilentlyContinue
+if ($mods.Count -eq 0) {
+    Write-Host "⚠️  No .jar mod files found in that folder." -ForegroundColor Yellow
+    Add-Content $report "⚠️  No .jar mod files found."
+    exit
 }
 
-# Analyze each mods folder
-foreach ($modsFolder in $modsPaths) {
-    Write-Host "`n🔍 Scanning: $($modsFolder.FullName)" -ForegroundColor Cyan
-    Add-Content $report "`n🔍 Scanning: $($modsFolder.FullName)"
+# Analyze mods
+foreach ($mod in $mods) {
+    $modName = $mod.Name
+    $sizeMB = "{0:N2}" -f ($mod.Length / 1MB)
+    $matches = $blacklist | Where-Object { $modName -match [regex]::Escape($_) }
 
-    $mods = Get-ChildItem -Path $modsFolder.FullName -Filter *.jar -File -ErrorAction SilentlyContinue
-    if ($mods.Count -eq 0) {
-        Write-Host "⚠️  No mod .jar files found." -ForegroundColor DarkYellow
-        Add-Content $report "⚠️  No mod .jar files found."
-        continue
-    }
-
-    foreach ($mod in $mods) {
-        $modName = $mod.Name
-        $sizeMB = "{0:N2}" -f ($mod.Length / 1MB)
-        $matches = $blacklist | Where-Object { $modName -match [regex]::Escape($_) }
-
-        if ($matches) {
-            $line = "❗ Suspicious Mod: $modName | ${sizeMB}MB | Keyword(s): $($matches -join ', ')"
-            Write-Host $line -ForegroundColor Red
-            Add-Content $report $line
-        } else {
-            $line = "✔ $modName | ${sizeMB}MB | Clean"
-            Write-Host $line -ForegroundColor Green
-            Add-Content $report $line
-        }
+    if ($matches) {
+        $line = "❗ Suspicious: $modName | ${sizeMB}MB | Match: $($matches -join ', ')"
+        Write-Host $line -ForegroundColor Red
+        Add-Content $report $line
+    } else {
+        $line = "✔ $modName | ${sizeMB}MB | Clean"
+        Write-Host $line -ForegroundColor Green
+        Add-Content $report $line
     }
 }
 
-# Finish
 Write-Host "`n✅ Scan complete. Report saved to: $report" -ForegroundColor Cyan
 Start-Sleep -Seconds 1
 Invoke-Item $report
+
