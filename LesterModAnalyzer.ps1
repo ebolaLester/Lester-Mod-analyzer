@@ -1,75 +1,62 @@
-# Temporary bypass
+# === Lester MOD ANALYZER (Habibi-style) ===
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+$host.UI.RawUI.WindowTitle = "LESTER MOD ANALYZER - MADE BY LESTER"
 
-# Set console title
-$host.UI.RawUI.WindowTitle = "Lester MOD ANALYZER - MADE BY LESTER"
-
-# Intro
 Write-Host "`n═════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host "         LESTER MOD ANALYZER - MADE BY LESTER         " -ForegroundColor Green
 Write-Host "═════════════════════════════════════════════════════`n" -ForegroundColor Cyan
 
-# Ask for the mods folder
-$modsFolder = Read-Host "👉 Enter path to your Minecraft 'mods' folder"
-
-# Suspicious keywords
-$blacklist = @('doomsday','vape','sigma','flux','jigsaw','huzuni','wurst','impact','liquidbounce','aimassist','autoclicker','xray','killaura')
-
-# Validate path
-if (-not (Test-Path $modsFolder)) {
-    Write-Host "❌ Invalid path: $modsFolder" -ForegroundColor Red
+# Prompt for mods directory
+$modsPath = Read-Host "👉 Enter path to your Minecraft 'mods' folder"
+if (-not (Test-Path $modsPath)) {
+    Write-Host "❌ Invalid path." -ForegroundColor Red
     exit
 }
 
-# Get .jar mod files
-$mods = Get-ChildItem -Path $modsFolder -Filter *.jar -File -ErrorAction SilentlyContinue
+# Suspicious string list
+$susStrings = @(
+    "vape", "doomsday", "sigma", "killaura", "ghost", "autoclicker", "aimassist", 
+    "crackedclient", "tokenlogger", "liquidbounce", "xray", "reach", "clicker", 
+    "backdoor", "exploit", "jigsaw", "inertia", "skid", "injector", "bypass"
+)
+
+# Scan each .jar mod
+$mods = Get-ChildItem $modsPath -Filter *.jar -File
 if ($mods.Count -eq 0) {
-    Write-Host "⚠️  No .jar mod files found in that folder." -ForegroundColor Yellow
+    Write-Host "⚠️  No .jar mods found in: $modsPath" -ForegroundColor Yellow
     exit
 }
 
-# Scan each mod
 foreach ($mod in $mods) {
     $modName = $mod.Name
-    $path = $mod.FullName
-    $sizeMB = "{0:N2}" -f ($mod.Length / 1MB)
+    $modPath = $mod.FullName
     $flagged = $false
-    $found = @()
+    $hitList = @()
 
-    # Check filename first
-    foreach ($keyword in $blacklist) {
-        if ($modName -match [regex]::Escape($keyword)) {
-            $found += "filename: $keyword"
-            $flagged = $true
-        }
-    }
-
-    # Check internal strings
     try {
-        $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
-        foreach ($entry in $zip.Entries) {
-            foreach ($keyword in $blacklist) {
-                if ($entry.FullName -match $keyword) {
-                    $found += "inside: $keyword"
-                    $flagged = $true
-                }
+        # Read raw bytes and convert to readable ASCII strings
+        $bytes = [System.IO.File]::ReadAllBytes($modPath)
+        $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+
+        foreach ($sus in $susStrings) {
+            if ($text -match $sus) {
+                $hitList += $sus
+                $flagged = $true
             }
         }
-        $zip.Dispose()
-    } catch {
-        Write-Host "⚠️  Could not read $modName — Skipped." -ForegroundColor Yellow
-        continue
-    }
 
-    # Output result
-    if ($flagged) {
-        Write-Host "❗ Suspicious: $modName | $sizeMB MB | $($found -join ', ')" -ForegroundColor Red
-    } else {
-        Write-Host "✔ Clean: $modName | $sizeMB MB" -ForegroundColor Green
+        if ($flagged) {
+            Write-Host "❗ Detected: $modName -> [$($hitList -join ', ')]" -ForegroundColor Red
+        } else {
+            Write-Host "✔ Clean: $modName" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "⚠️  Could not scan: $modName — Skipped." -ForegroundColor Yellow
     }
 }
 
-Write-Host "`n✅ Done. Press any key to close..."
+Write-Host "`n✅ Scan complete. Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
 
 
