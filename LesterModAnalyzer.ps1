@@ -1,62 +1,78 @@
-# === Lester MOD ANALYZER (Habibi-style) ===
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-$host.UI.RawUI.WindowTitle = "LESTER MOD ANALYZER - MADE BY LESTER"
+# Lester Mod Analyzer - Made by Lester
+# Cleaned & Enhanced with Legit Whitelist and Internal Cheat String Detection
 
-Write-Host "`n═════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "         LESTER MOD ANALYZER - MADE BY LESTER         " -ForegroundColor Green
-Write-Host "═════════════════════════════════════════════════════`n" -ForegroundColor Cyan
+Write-Host "\n=============================================" -ForegroundColor Cyan
+Write-Host "      LESTER MOD ANALYZER - MADE BY LESTER" -ForegroundColor Green
+Write-Host "=============================================\n" -ForegroundColor Cyan
 
-# Prompt for mods directory
-$modsPath = Read-Host "👉 Enter path to your Minecraft 'mods' folder"
-if (-not (Test-Path $modsPath)) {
-    Write-Host "❌ Invalid path." -ForegroundColor Red
+# Prompt for path
+$modsPath = Read-Host "👉 Enter path to your Minecraft 'mods' folder (e.g. C:\Users\YourName\AppData\Roaming\.minecraft\mods)"
+
+if (!(Test-Path $modsPath)) {
+    Write-Host "[!] The path does not exist. Exiting..." -ForegroundColor Red
     exit
 }
 
-# Suspicious string list
-$susStrings = @(
-    "vape", "doomsday", "sigma", "killaura", "ghost", "autoclicker", "aimassist", 
-    "crackedclient", "tokenlogger", "liquidbounce", "xray", "reach", "clicker", 
-    "backdoor", "exploit", "jigsaw", "inertia", "skid", "injector", "bypass"
+# Legitimate mod names that should never be flagged
+$whitelist = @(
+    "sodium", "lithium", "voicechat", "replaymod", "modmenu", "seedcracker",
+    "cloth-config", "roughlyenoughitems", "xaeros", "map", "cleanview",
+    "exodium", "appleskin", "betterpingdisplay", "entityculling"
 )
 
-# Scan each .jar mod
-$mods = Get-ChildItem $modsPath -Filter *.jar -File
-if ($mods.Count -eq 0) {
-    Write-Host "⚠️  No .jar mods found in: $modsPath" -ForegroundColor Yellow
-    exit
-}
+# Strings typically found in malicious mod jars
+$susStrings = @(
+    "AutoClicker", "KillAura", "AimAssist", "TriggerBot", "Reach",
+    "Fly", "Scaffold", "SilentAim", "TargetStrafe", "Blink",
+    "FastPlace", "WTap", "NoFall", "Criticals", "KeybindManager",
+    "InventoryMove", "ESP", "XRay", "RenderManager", "Freecam"
+)
 
-foreach ($mod in $mods) {
-    $modName = $mod.Name
-    $modPath = $mod.FullName
-    $flagged = $false
-    $hitList = @()
+# Function to scan inside each mod jar
+Get-ChildItem -Path $modsPath -Filter *.jar | ForEach-Object {
+    $mod = $_.FullName
+    $modName = $_.Name.ToLower()
+
+    # Skip if mod is in the whitelist
+    if ($whitelist | Where-Object { $modName -like "*$_*" }) {
+        Write-Host "✔ Clean: $modName" -ForegroundColor Green
+        return
+    }
 
     try {
-        # Read raw bytes and convert to readable ASCII strings
-        $bytes = [System.IO.File]::ReadAllBytes($modPath)
-        $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+        $found = $false
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($mod)
 
-        foreach ($sus in $susStrings) {
-            if ($text -match $sus) {
-                $hitList += $sus
-                $flagged = $true
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName -match '\.(class|txt|json|cfg|xml)$') {
+                $stream = $entry.Open()
+                $reader = New-Object System.IO.StreamReader($stream)
+                $text = $reader.ReadToEnd()
+                $reader.Close()
+
+                foreach ($sus in $susStrings) {
+                    if ($text -match "\b$sus\b") {
+                        Write-Host "❗ Detected: $modName -> [$sus]" -ForegroundColor Red
+                        $found = $true
+                        break
+                    }
+                }
+                if ($found) { break }
             }
         }
-
-        if ($flagged) {
-            Write-Host "❗ Detected: $modName -> [$($hitList -join ', ')]" -ForegroundColor Red
-        } else {
+        if (-not $found) {
             Write-Host "✔ Clean: $modName" -ForegroundColor Green
         }
+        $zip.Dispose()
     } catch {
-        Write-Host "⚠️  Could not scan: $modName — Skipped." -ForegroundColor Yellow
+        Write-Host "⚠ Could not read $modName — Skipped." -ForegroundColor Yellow
     }
 }
 
-Write-Host "`n✅ Scan complete. Press any key to exit..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# Reminder for GitHub one-liner:
+Write-Host "\n[💡] To run this from GitHub use:" -ForegroundColor Cyan
+Write-Host "Set-ExecutionPolicy Bypass -Scope Process; iex (irm https://raw.githubusercontent.com/ebolaLester/Lester-Mod-analyzer/main/LesterModAnalyzer.ps1)" -ForegroundColor Yellow
+
 
 
 
